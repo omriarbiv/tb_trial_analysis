@@ -23,12 +23,6 @@ dp$study_name <- sub("exp", "experimental", dp$study_name)
 # Removing study with ranges
 dp2 <- dp[!is.na(dp$comb_75), ]
 
-# Add colours (closest to global age [55])
-# Generate 110 colours with 55 in the middle
-col_range <- c(hcl.colors(55), hcl.colors(55, rev = T))
-# age_range <- 1:(55*2)
-dp2$col <- col_range[round(dp2$comb_75)]
-
 pdf("75-2.pdf", 8, 8)
 with(dp2, 
      dotchart(comb_75,
