@@ -1,8 +1,9 @@
 library(parallel)
 
 set.seed(4)
-nsim <- 1e5
-ncores <- detectCores() - 1
+nsim <- 1e6
+irr_scenario <- c(1.5, 2, 3)
+ncores <- 4
 
 # TDR power analysis ----------------------------------------------------------
 tdr_data <- read.csv("tdr.csv")
@@ -17,9 +18,6 @@ sdr_meta_rate <- with(tdr_data,
                   ))
 
 mean_sdr_rate <- exp(sdr_meta_rate$TE.random)
-
-# Double rate of adverse events for patients receiving TDR
-mean_tdr_rate <- mean_sdr_rate * 2
 
 calc_power_tdr <- function(nsim, n_sdr, n_tdr, tdr_days, 
                            days_post_tdr, sdr_days, 
@@ -44,30 +42,41 @@ calc_power_tdr <- function(nsim, n_sdr, n_tdr, tdr_days,
   irr_val <- sapply(1:nsim, \(.x) irr[[.x]]$measure[2, 1])
   
   # Power of IRR with p value < 0.05 that found TDR had more events than SDR
-  power <- sum(irr_p < 0.05 & irr_val > 1) / nsim
+  power <- (sum(irr_p < 0.05 & irr_val > 1) / nsim) * 100
   return(power)
 }
 
-t1 <- Sys.time()
-tdr_data$power <- with(tdr_data,
-                       mclapply(1:nrow(tdr_data), \(.x) {
-                         calc_power_tdr(nsim, n_sdr[.x], n_tdr[.x],
-                                        tdr_days[.x], 
-                                        after_tdr_sdr_days[.x],
-                                        sdr_days[.x])
-                       }, mc.cores = ncores)) |> 
-                      simplify2array()
-Sys.time() - t1
+
+for (irr in irr_scenario) {
+	tdr_data[[paste0("power", irr)]] <- with(
+		tdr_data, mclapply(1:nrow(tdr_data), \(.x) {
+				 calc_power_tdr(nsim, n_sdr[.x], n_tdr[.x], tdr_days[.x], after_tdr_sdr_days[.x],
+												sdr_days[.x], sdr_rate = mean_sdr_rate, 
+												tdr_rate = mean_sdr_rate*irr)
+						 }, mc.cores = ncores, mc.set.seed = TRUE)) |> 
+						simplify2array()
+}
 
 # Find max power in each study comparison
+tdr_max_power <- replicate(3, NA, F)
+names(tdr_max_power) <- paste0("power", irr_scenario)
+
 tdr_by_study <- split(tdr_data, tdr_data$study)
-tdr_max_power <- lapply(tdr_by_study, \(x) max(x$power))
+ 
+for(irr in irr_scenario) { 
+	s <- paste0("power", irr)
+	tdr_max_power[[s]] <- sapply(tdr_by_study, \(x) max(x[[s]]))
+}
 
 # Make summary table
 tdr_power <- data.frame(
   study = unique(tdr_data$study), 
-  power = unsplit(tdr_max_power, unique(tdr_data$study))
+  power1.5 = unsplit(tdr_max_power[["power1.5"]], unique(tdr_data$study)),
+  power2 = unsplit(tdr_max_power[["power2"]], unique(tdr_data$study)),
+  power3 = unsplit(tdr_max_power[["power3"]], unique(tdr_data$study))
 )
+
+write.csv(tdr_power, "tdr_power_table.csv")
 
 # PaMZ power analysis ---------------------------------------------------------
 
@@ -82,7 +91,6 @@ rhze_meta_rate <- with(pamz_data,
                        ))
 
 mean_rhze_rate <- exp(rhze_meta_rate$TE.random)
-mean_pamz_rate <- mean_rhze_rate * 2
 
 # This function is slightly different than `calc_power_tdr` because unlike 
 # the TDR studies, participants randomized to PaMZ were not given RHZE afterwards 
@@ -102,23 +110,38 @@ calc_power_pamz <- function(nsim, rhze_n, pamz_n,
   
   irr_p <- sapply(1:nsim, \(.x) irr[[.x]]$p.value[2, 1])
   irr_val <- sapply(1:nsim, \(.x) irr[[.x]]$measure[2, 1])
-  power <- sum(irr_p < 0.05 & irr_val > 1) / nsim
+  power <- (sum(irr_p < 0.05 & irr_val > 1) / nsim) * 100
   return(power)
 }
 
-pamz_data$power <- with(pamz_data,
-                       mclapply(1:nrow(pamz_data), \(.x) {
-                         calc_power_pamz(nsim, rhze_n[.x], pamz_n[.x],
-                                         rhze_days[.x], pamz_days[.x])
-                       }, mc.cores = ncores)) |> 
+for (irr in irr_scenario) {
+	pamz_data[[paste0("power", irr)]] <- with(
+		pamz_data, mclapply(1:nrow(pamz_data), \(.x) {
+                        calc_power_pamz(nsim, rhze_n[.x], pamz_n[.x],
+                                        rhze_days[.x], pamz_days[.x],
+                                        rhze_rate = mean_rhze_rate, 
+																				pamz_rate = mean_rhze_rate*irr)
+                       }, mc.cores = ncores, mc.set.seed = TRUE)) |> 
                     simplify2array()
+}
 
 # Find max power in each study comparison
+pamz_max_power <- replicate(3, NA, F)
+names(pamz_max_power) <- paste0("power", irr_scenario)
+
 pamz_by_study <- split(pamz_data, pamz_data$study)
-pamz_max_power <- lapply(pamz_by_study, \(x) max(x$power))
+ 
+for(irr in irr_scenario) { 
+	s <- paste0("power", irr)
+	pamz_max_power[[s]] <- sapply(pamz_by_study, \(x) max(x[[s]]))
+}
 
 # Make summary table
 pamz_power <- data.frame(
   study = unique(pamz_data$study), 
-  power = unsplit(pamz_max_power, unique(pamz_data$study))
+  power1.5 = unsplit(pamz_max_power[["power1.5"]], unique(pamz_data$study)),
+  power2 = unsplit(pamz_max_power[["power2"]], unique(pamz_data$study)),
+  power3 = unsplit(pamz_max_power[["power3"]], unique(pamz_data$study))
 )
+
+write.csv(pamz_power, "pamz_power.csv")

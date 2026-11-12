@@ -2,10 +2,7 @@ library(tidyverse)
 library(readxl)
 library(tidytext)
 
-raw <- read_xlsx(
-  "Extraction/OA TB Tolerability Data Extraction.xlsx",
-  sheet = "Text"
-) |>
+raw <- read_xlsx("words_for_analysis.xlsx") |>
   mutate(full_text = paste(full_text, full_text_contd)) |>
   select(!full_text_contd) |>
   mutate(id = paste(author, year))

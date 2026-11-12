@@ -23,7 +23,7 @@ dp$study_name <- sub("exp", "experimental", dp$study_name)
 # Removing study with ranges
 dp2 <- dp[!is.na(dp$comb_75), ]
 
-pdf("75-2.pdf", 8, 8)
+pdf("75-2.pdf", 7.5, 7.5)
 with(dp2, 
      dotchart(comb_75,
               labels = study_name,
